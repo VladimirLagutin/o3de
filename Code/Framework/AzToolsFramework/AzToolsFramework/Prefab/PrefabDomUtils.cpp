@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: Apache-2.0 OR MIT
  *
  */
-
+#include <AzCore/std/containers/unordered_set.h>
 #include <AzCore/Asset/AssetManager.h>
 #include <AzCore/Asset/AssetJsonSerializer.h>
 #include <AzCore/JSON/prettywriter.h>
@@ -171,7 +171,7 @@ namespace AzToolsFramework
                     {
                         // Only track the instance that was passed in
                         return (&instance == entityIdMapper.GetLoadingInstance());
-                    }; 
+                    };
 
                     if ((flags & LoadFlags::ReportDeprecatedComponents) == LoadFlags::ReportDeprecatedComponents)
                     {
@@ -444,7 +444,7 @@ namespace AzToolsFramework
                     {
                         continue;
                     }
-                
+
                     AZStd::string_view patchPath = patchEntryIterator->value.GetString();
 
                     // Entities
@@ -522,7 +522,7 @@ namespace AzToolsFramework
                     }
                 }
 
-                return AZStd::move(patchesMetadata);
+                return patchesMetadata;
             }
 
             void PrintPrefabDomValue(
@@ -585,6 +585,11 @@ namespace AzToolsFramework
 
             bool SubstituteInvalidParentsInEntities(PrefabDom& templateDomRef)
             {
+                const AZStd::unordered_set<AZStd::string> TransformComponentNames = {
+                    "{27F1E1A1-8D9D-4C3B-BD3A-AFB9762449C0} TransformComponent",
+                    "TransformComponent"
+                };
+
                 // Search for a TransformComponent and check the "Parent Entity" statement
                 auto sourceIt = templateDomRef.FindMember(PrefabDomUtils::SourceName);
                 if (sourceIt == templateDomRef.MemberEnd() || !sourceIt->value.IsString())
@@ -656,13 +661,15 @@ namespace AzToolsFramework
                                 path.c_str(), entityAlias.c_str(), entityName.c_str());
                             continue;
                         }
-                        
+
                         AZStd::string componentAlias(componentsTypeIt->value.GetString());
-                        if (!componentAlias.contains("TransformComponent"))
+
+
+                        if (!TransformComponentNames.contains(componentAlias))
                         {
-                            continue;
+                            continue; // not the component we are looking for
                         }
-                        
+
                         constexpr const auto parentObjectName = "Parent Entity";
                         auto parentIt = componentIt->value.FindMember(parentObjectName);
                         if (parentIt == componentIt->value.MemberEnd() || !parentIt->value.IsString())
@@ -678,7 +685,7 @@ namespace AzToolsFramework
                             // Re-link this entity under the ContainerEntity using its Alias
                             parentIt->value.SetString(rapidjson::StringRef(containerEntityAlias.c_str()), templateDomRef.GetAllocator());
 
-                            result = false; // report that changes were needed and made 
+                            result = false; // report that changes were needed and made
                             AZ_Error("Prefab", false,
                                 "'%s' lacks 'Parent Entity' value in TransformComponent of Entity (%s, '%s')"
                                 "\nEntity re-linked under the root container '%s'.",
